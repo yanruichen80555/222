@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>恐龍仙人跳</title>
+    <!-- 載入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 使用 Inter 字體 */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f7f7; /* 淺灰色背景 */
+        }
+        
+        #gameContainer {
+            position: relative;
+            height: 300px; /* 遊戲區域高度 */
+            width: 90%;
+            max-width: 800px;
+            overflow: hidden;
+            border-bottom: 4px solid #333; /* 地面線 */
+            background-color: #fff;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .dino {
+            position: absolute;
+            bottom: 0;
+            left: 50px;
+            width: 40px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            font-size: 32px;
+            /* 恐龍的簡易視覺樣式 */
+            background-color: transparent;
+            /* --------------------------------- */
+            /* 新增: 預設水平翻轉，讓恐龍朝向右邊 */
+            transform: scaleX(-1); 
+            /* --------------------------------- */
+            transform-origin: center bottom;
+            transition: transform 0.1s ease-out; /* 輕微的動畫效果 */
+        }
+
+        .obstacle {
+            position: absolute;
+            bottom: 0;
+            width: 20px;
+            height: 40px;
+            background-color: #4CAF50; /* 障礙物顏色 (綠色仙人掌) */
+            border-radius: 4px;
+        }
+
+        /* 遊戲結束覆蓋層 */
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.9);
+            z-index: 10;
+        }
+        
+        .jump-animation {
+            animation: jump 0.5s ease-out;
+        }
+
+        @keyframes jump {
+            /* 由於我們將跳躍動畫改為直接在 JS 中控制，這裡的 @keyframes jump 不再使用 */
+            0% { transform: translateY(0) scaleX(-1); }
+            50% { transform: translateY(-100px) scaleX(-1); }
+            100% { transform: translateY(0) scaleX(-1); }
+        }
+
+        /* 按鈕樣式 */
+        .game-button {
+            transition: all 0.2s;
+        }
+        .game-button:hover {
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
+        }
+        .game-button:active {
+            transform: translateY(1px);
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
+
+    <div class="p-6 bg-white rounded-xl shadow-2xl mb-6 w-full max-w-xl">
+        <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">恐龍仙人跳 - 跳躍挑戰</h1>
+        <p class="text-gray-500 text-center mb-4">按下 <span class="font-mono font-bold text-purple-600">空格鍵</span> 或 <span class="font-bold text-indigo-600">輕觸遊戲區域</span> 來開始和跳躍！</p>
+    </div>
+
+    <!-- 遊戲區域 -->
+    <div id="gameContainer" class="rounded-lg">
+        <div id="dino" class="dino">🦖</div>
+        
+        <!-- 遊戲結束畫面 -->
+        <div id="gameOver" class="flex flex-col items-center justify-center">
+            <h2 class="text-4xl font-extrabold text-red-600 mb-4">遊戲結束！</h2>
+            <p id="finalScoreText" class="text-xl text-gray-700 mb-6">您的分數：0</p>
+            <button id="restartButton" class="game-button px-6 py-3 bg-indigo-500 text-white font-bold rounded-lg shadow-md hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                重新開始
+            </button>
+        </div>
+    </div>
+
+    <!-- 分數顯示 -->
+    <div class="mt-4 p-4 bg-gray-800 text-white rounded-lg w-full max-w-xl flex justify-between items-center shadow-lg">
+        <span class="text-lg font-semibold">分數：</span>
+        <span id="score" class="text-3xl font-bold text-yellow-400">0</span>
+    </div>
+
+    <script>
+        // 遊戲元素
+        const gameContainer = document.getElementById('gameContainer');
+        const dino = document.getElementById('dino');
+        const scoreDisplay = document.getElementById('score');
+        const gameOverScreen = document.getElementById('gameOver');
+        const finalScoreText = document.getElementById('finalScoreText');
+        const restartButton = document.getElementById('restartButton');
+
+        // 遊戲狀態變數
+        let isJumping = false;
+        let isGameOver = true;
+        let score = 0;
+        let gameSpeed = 5; // 遊戲速度 (像素/幀)
+        let frameCount = 0;
+        let gameLoopId;
+
+        // --- 恐龍跳躍邏輯 ---
+        function jump() {
+            if (isJumping) return;
+            
+            isJumping = true;
+            // ---------------------------------
+            // 更新: 跳躍時同時保持 scaleX(-1) 翻轉
+            dino.style.transform = 'translateY(-100px) scaleX(-1)'; // 跳躍高度
+
+            // 0.5 秒後回到地面
+            setTimeout(() => {
+                // 更新: 回到地面時同時保持 scaleX(-1) 翻轉
+                dino.style.transform = 'translateY(0) scaleX(-1)';
+                isJumping = false;
+            }, 500);
+            // ---------------------------------
+        }
+
+        // 監聽鍵盤事件 (空格鍵)
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault(); // 防止頁面滾動
+                if (isGameOver) {
+                    startGame();
+                } else {
+                    jump();
+                }
+            }
+        });
+
+        // 監聽觸控事件 (點擊遊戲區域)
+        gameContainer.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGameOver) {
+                startGame();
+            } else {
+                jump();
+            }
+        });
+
+        // --- 障礙物邏輯 ---
+        function createObstacle() {
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            // 隨機障礙物高度，增加變化性
+            const height = Math.random() > 0.5 ? 40 : 60;
+            obstacle.style.height = height + 'px';
+            
+            // 障礙物初始位置在遊戲區域最右邊
+            obstacle.style.left = gameContainer.offsetWidth + 'px'; 
+
+            gameContainer.appendChild(obstacle);
+            
+            // 設定障礙物移動和移除邏輯
+            function moveObstacle() {
+                if (isGameOver) {
+                    gameContainer.removeChild(obstacle);
+                    return;
+                }
+
+                let currentLeft = parseFloat(obstacle.style.left);
+                currentLeft -= gameSpeed;
+                obstacle.style.left = currentLeft + 'px';
+
+                // 檢查碰撞
+                checkCollision(obstacle);
+
+                // 障礙物移出畫面後移除
+                if (currentLeft < -obstacle.offsetWidth) {
+                    gameContainer.removeChild(obstacle);
+                    score++; // 成功躲過，增加分數
+                    updateScore();
+                    return;
+                }
+                
+                // 每次幀更新時移動
+                requestAnimationFrame(moveObstacle);
+            }
+
+            requestAnimationFrame(moveObstacle);
+        }
+
+        // --- 碰撞檢測 ---
+        function checkCollision(obstacle) {
+            const dinoRect = dino.getBoundingClientRect();
+            const obstacleRect = obstacle.getBoundingClientRect();
+            const gameContainerRect = gameContainer.getBoundingClientRect();
+
+            // 調整 Rects 以相對於 gameContainer 的座標
+            const dinoX = dinoRect.left - gameContainerRect.left;
+            const dinoY = dinoRect.bottom - gameContainerRect.bottom;
+            const dinoWidth = dinoRect.width;
+            const dinoHeight = dinoRect.height;
+
+            const obsX = obstacleRect.left - gameContainerRect.left;
+            const obsY = obstacleRect.bottom - gameContainerRect.bottom;
+            const obsWidth = obstacleRect.width;
+            const obsHeight = obstacleRect.height;
+            
+            // 碰撞條件：水平和垂直都重疊
+            const horizontalCollision = (dinoX + dinoWidth > obsX) && (dinoX < obsX + obsWidth);
+            const verticalCollision = (dinoY + dinoHeight > obsY) && (dinoY < obsY + obsHeight);
+
+            if (horizontalCollision && verticalCollision) {
+                gameOver();
+            }
+        }
+
+        // --- 遊戲主循環 ---
+        function gameLoop() {
+            if (isGameOver) return;
+
+            frameCount++;
+            
+            // 每隔一段時間產生新的障礙物
+            // 速度越快，間隔越短
+            const spawnInterval = Math.max(50, 200 - gameSpeed * 5); 
+            if (frameCount % spawnInterval === 0) {
+                createObstacle();
+            }
+            
+            // 每 100 幀增加一點點速度 (讓遊戲越來越難)
+            if (frameCount % 100 === 0) {
+                 gameSpeed += 0.5;
+            }
+
+            // 更新分數顯示 (在 obstacle 邏輯中更新)
+            
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+
+        // --- 分數更新 ---
+        function updateScore() {
+            scoreDisplay.textContent = score;
+            // 遊戲速度可以根據分數增加
+            // gameSpeed = 5 + Math.floor(score / 10) * 0.5;
+        }
+
+        // --- 遊戲開始 ---
+        function startGame() {
+            // 重置狀態
+            isGameOver = false;
+            score = 0;
+            gameSpeed = 5;
+            frameCount = 0;
+            updateScore();
+            gameOverScreen.style.display = 'none';
+
+            // 移除所有舊的障礙物
+            document.querySelectorAll('.obstacle').forEach(obs => obs.remove());
+            
+            // 開始遊戲循環
+            gameLoop();
+        }
+
+        // --- 遊戲結束 ---
+        function gameOver() {
+            isGameOver = true;
+            cancelAnimationFrame(gameLoopId); // 停止遊戲循環
+
+            // 顯示遊戲結束畫面
+            finalScoreText.textContent = `您的分數：${score}`;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        // 重新開始按鈕事件
+        restartButton.addEventListener('click', startGame);
+
+        // 初始設定：顯示開始提示
+        gameOverScreen.style.display = 'flex';
+        finalScoreText.textContent = '準備好了嗎？';
+        restartButton.textContent = '開始遊戲';
+
+    </script>
+</body>
+</html>
